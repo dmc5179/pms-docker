@@ -1,0 +1,41 @@
+FROM registry.access.redhat.com/ubi7/ubi-init:latest
+
+ARG S6_OVERLAY_VERSION=v1.17.2.0
+#ENV TERM="xterm" LANG="C.UTF-8" LC_ALL="C.UTF-8"
+
+ENTRYPOINT ["/init"]
+
+COPY ./plex.repo /etc/yum.repos.d/
+
+# This is strange. The plex server looks to see if PID 1 is systemd
+# and if it is not then the RPM install fails. This doesn't work in a container
+# during install so just change it for a sec.
+RUN \
+  echo -n 'systemd' > /proc/1/comm && \
+  yum -y update && \
+  yum -y install plexmediaserver && \
+  echo -n 'bash' > /proc/1/comm && \
+    
+# Setup directories
+    mkdir -p \
+      /config \
+      /transcode \
+      /data \
+    && \
+
+# Cleanup
+    yum -y clean all && \
+    rm -rf /var/cache/yum
+
+EXPOSE 32400/tcp 3005/tcp 8324/tcp 32469/tcp 1900/udp 32410/udp 32412/udp 32413/udp 32414/udp
+VOLUME /config /transcode
+
+#ENV CHANGE_CONFIG_DIR_OWNERSHIP="true" \
+#    HOME="/config"
+
+ARG TAG=beta
+ARG URL=
+
+COPY root/healthcheck.sh /
+
+HEALTHCHECK --interval=5s --timeout=2s --retries=20 CMD /healthcheck.sh || exit 1
